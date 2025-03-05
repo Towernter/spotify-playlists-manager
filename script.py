@@ -16,6 +16,9 @@ def main():
     redirect_uri = os.getenv('REDIRECT_URI')
     user_name = os.getenv('USER_NAME')
     top_100_spotify_playlist_id = os.getenv('TOP_100_SPOTIFY_PLAYLIST_ID')
+    eighties_pop_rock_spotify_playlist_id = os.getenv('EIGHTIES_POP_ROCK_HITS_SPOTIFY_PLAYLIST_ID')
+    eighties_pop_rock_youtube_playlist_id = os.getenv('EIGHTIES_POP_ROCK_HITS_YOUTUBE_PLAYLIST_ID')
+    eighties_pop_rock_youtube_playlist_id_1 = os.getenv('EIGHTIES_POP_ROCK_HITS_YOUTUBE_PLAYLIST_ID_1')
     scopes = os.getenv('SCOPES')
 
     # Access YouTube credentials
@@ -28,6 +31,11 @@ def main():
 
     # get all playlist names and ids
     my_playlists = spotify_api.get_playlist_names_and_ids(user_name)
+
+    # update_playlist_from_youtube(eighties_pop_rock_spotify_playlist_id, 
+    #                              eighties_pop_rock_youtube_playlist_id, 
+    #                              spotify_api, youtube_api, remove=False)
+    # return
 
     #Re-Order all playlists by popularity except for current Top 100
     re_order_playlists(my_playlists, spotify_api)
