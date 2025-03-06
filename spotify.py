@@ -107,6 +107,36 @@ class SpotifyAPI:
             'popularity': tracks[0]['popularity']
         }
 
+    def search_song_strict(self, query, limit=5):
+        # Debug: Print the search query
+        endpoint = f'search?q={query}&type=track&limit={limit}'
+        data = self.fetch_web_api(endpoint)
+        tracks = data.get('tracks', {}).get('items', [])
+
+        if not tracks:
+            return None  # No tracks found at all
+
+        # Iterate through the search results and look for close matches
+        for track in tracks:
+            track_artists = ', '.join(artist['name'] for artist in track['artists'])
+            track_name = track['name']
+
+            # Match if the query closely matches the song name or artist names
+            if query.lower() in track_name.lower() or query.lower() in track_artists.lower():
+                return {
+                    'id': track['id'],
+                    'uri': track['uri'],
+                    'song_name': track_name,
+                    'artists': track_artists,
+                    'album': track['album']['name'],
+                    'release_date': track['album']['release_date'],
+                    'popularity': track['popularity']
+                }
+
+        # If no close match is found, return None
+        print(f"No strict match found for query: {query}")
+        return None
+
     def add_tracks_to_playlist(self, playlist_id, track_uris):
         endpoint = f'playlists/{playlist_id}/tracks'
         batch_size = 100
@@ -145,7 +175,26 @@ class SpotifyAPI:
             print(f"Removed {len(batch)} tracks from playlist.")
         return response
     
-    def reorder_playlist_tracks(self, playlist_id, ordered_uris):
+    def reorder_playlist_tracks(self, playlist_id, track_uris):
+        endpoint = f'playlists/{playlist_id}/tracks'
+        current_tracks = self.get_playlist_tracks(playlist_id)
+        current_uris = [track['uri'] for track in current_tracks]
+
+        # Only update if the order has changed
+        if current_uris == track_uris:
+            print("☑️ Playlist order is already correct. No update needed.")
+            return
+
+        # Prepare the request body
+        batches = [track_uris[i:i + 100] for i in range(0, len(track_uris), 100)]
+        for batch in batches:
+            body = {'uris': batch}
+            response = self.fetch_web_api(endpoint, method='PUT', body=body)
+            print(f"✅ Updated playlist order for {len(batch)} tracks.")
+        
+        return response
+    
+    def reorder_playlist_many_tracks(self, playlist_id, ordered_uris):
         # Fetch current tracks from the playlist
         existing_tracks = self.get_playlist_tracks(playlist_id)
         existing_uris = [track['uri'] for track in existing_tracks]
@@ -155,7 +204,7 @@ class SpotifyAPI:
         missing_uris = [uri for uri in existing_uris if uri not in final_order]
         final_order.extend(missing_uris)  # Add any tracks that weren't in ordered_uris
 
-        print(f"Reordering {len(final_order)} tracks...")
+        print(f"🔃Reordering {len(final_order)} tracks...")
 
         # Reorder in batches
         for i, uri in enumerate(final_order):
@@ -171,7 +220,7 @@ class SpotifyAPI:
                 # else:
                     # print(f"❌ Failed to reorder track {uri}")
 
-        print(f"Finished reordering {len(final_order)} tracks.")
+        print(f"✅Finished reordering {len(final_order)} tracks.")
 
     def update_playlist_description(self, playlist_id, playlist_name, base_description):
         print(f"Updating Playlist Description for {playlist_name}")
