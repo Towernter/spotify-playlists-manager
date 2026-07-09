@@ -1,0 +1,30 @@
+name: Update Top 100 Playlist
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM UTC
+  workflow_dispatch:      # Allow manual runs from GitHub UI
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run script
+        env:
+          CLIENT_ID: ${{ secrets.CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.REFRESH_TOKEN }}
+          TOP_100_SPOTIFY_PLAYLIST_ID: ${{ secrets.TOP_100_SPOTIFY_PLAYLIST_ID }}
+          API_KEY: ${{ secrets.API_KEY }}
+          TOP_100_YOUTUBE_PLAYLIST_ID: ${{ secrets.TOP_100_YOUTUBE_PLAYLIST_ID }}
+        run: python script.py
