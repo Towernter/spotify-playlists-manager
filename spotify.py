@@ -92,13 +92,14 @@ class SpotifyAPI:
         stop_words = {'the', 'a', 'an', 'and', 'or', 'by', 'ft', 'feat', 'with', 'of', 'in', 'on'}
         query_words = {w.lower() for w in query.split() if len(w) > 2 and w.lower() not in stop_words}
 
+        # Pass 2: artist name overlaps AND at least one query word appears in the track title.
+        # Both conditions required — artist-only match grabs wrong songs from the right artist.
         for track in tracks:
             track_name = track['name']
             track_artists_str = ', '.join(artist['name'] for artist in track['artists'])
             artist_words = {w.lower() for a in track['artists'] for w in a['name'].split() if len(w) > 2}
-
-            # Pass 2: at least one query word matches this track's artist names
-            if query_words & artist_words:
+            title_words = set(track_name.lower().split())
+            if (query_words & artist_words) and (query_words & title_words):
                 return {
                     'id': track['id'],
                     'uri': track['uri'],
@@ -109,8 +110,12 @@ class SpotifyAPI:
                     'popularity': track['popularity']
                 }
 
-            # Pass 3: at least 2 query words appear in the track title
-            # (single-word overlap is too weak — common Shona words like "wangu" cause false positives)
+        # Pass 3: at least 2 query words appear in the track title.
+        # Handles songs where the artist name isn't in the YouTube title.
+        # Requires 2 words to prevent single common-word matches (e.g. "wangu").
+        for track in tracks:
+            track_name = track['name']
+            track_artists_str = ', '.join(artist['name'] for artist in track['artists'])
             if len(query_words & set(track_name.lower().split())) >= 2:
                 return {
                     'id': track['id'],
