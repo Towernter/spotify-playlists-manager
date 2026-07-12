@@ -11,18 +11,21 @@ def main():
     client_id = os.getenv('CLIENT_ID')
     client_secret = os.getenv('CLIENT_SECRET')
     refresh_token = os.getenv('REFRESH_TOKEN')
-    # redirect_uri = os.getenv('REDIRECT_URI')
-    # user_name = os.getenv('USER_NAME')
     top_100_spotify_playlist_id = os.getenv('TOP_100_SPOTIFY_PLAYLIST_ID')
-    # eighties_pop_rock_spotify_playlist_id = os.getenv('EIGHTIES_POP_ROCK_HITS_SPOTIFY_PLAYLIST_ID')
-    # eighties_pop_rock_youtube_playlist_id = os.getenv('EIGHTIES_POP_ROCK_HITS_YOUTUBE_PLAYLIST_ID')
-    # eighties_pop_rock_youtube_playlist_id_1 = os.getenv('EIGHTIES_POP_ROCK_HITS_YOUTUBE_PLAYLIST_ID_1')
-    # zim_old_school_spotify_playlist = os.getenv('ZIM_OLD_SCHOOL_SPOTIFY_PLAYLIST')
-    # zim_old_school_youtube_playlist = os.getenv('ZIM_OLD_SCHOOL_YOUTUBE_PLAYLIST')
-    # scopes = os.getenv('SCOPES')
-
     api_key = os.getenv('API_KEY')
     top_100_youtube_playlist_id = os.getenv('TOP_100_YOUTUBE_PLAYLIST_ID')
+
+    required = {
+        'CLIENT_ID': client_id,
+        'CLIENT_SECRET': client_secret,
+        'REFRESH_TOKEN': refresh_token,
+        'TOP_100_SPOTIFY_PLAYLIST_ID': top_100_spotify_playlist_id,
+        'API_KEY': api_key,
+        'TOP_100_YOUTUBE_PLAYLIST_ID': top_100_youtube_playlist_id,
+    }
+    missing = [k for k, v in required.items() if not v]
+    if missing:
+        raise EnvironmentError(f"Missing required environment variables: {', '.join(missing)}")
 
     spotify_api = SpotifyAPI(client_id, client_secret, refresh_token)
     youtube_api = YouTubeAPI(api_key)
