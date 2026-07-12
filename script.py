@@ -3,6 +3,7 @@ from spotify import SpotifyAPI
 from youtube import YouTubeAPI
 # from urllib.parse import urlencode
 from dotenv import load_dotenv
+from datetime import datetime
 import os
 
 def main():
@@ -34,10 +35,13 @@ def main():
     # re_order_playlists(my_playlists, spotify_api)
     # update_playlists_descriptions(my_playlists, spotify_api)
 
+    FILL_ARTIST_ID = '6pOab04jBaAi2SlrMJ0wOG'  # 9xne
+
     update_playlist_from_youtube(top_100_spotify_playlist_id,
                                  top_100_youtube_playlist_id,
                                  spotify_api, youtube_api,
-                                 remove=True, strict_search=False)
+                                 remove=True, strict_search=False,
+                                 fill_artist_id=FILL_ARTIST_ID)
 
 # def re_order_playlists(my_playlists, spotify_api):
 #     for playlist in my_playlists:
@@ -66,7 +70,8 @@ def main():
 #             spotify_api.update_playlist_description(playlist['id'], "", base_description)
 
 def update_playlist_from_youtube(playlist_id, youtube_playlist_id, spotify_api,
-                                 youtube_api, remove=False, strict_search=False):
+                                 youtube_api, remove=False, strict_search=False,
+                                 fill_artist_id=None, target_count=100):
     print("\nYouTube Playlist Tracks:")
     youtube_videos = youtube_api.get_playlist_items(youtube_playlist_id)
 
@@ -135,6 +140,26 @@ def update_playlist_from_youtube(playlist_id, youtube_playlist_id, spotify_api,
     print(f"Added to playlist: {len(tracks_to_add)}")
     if remove:
         print(f"Removed from playlist: {len(tracks_to_remove)}")
+
+    gap = target_count - len(found_tracks)
+    if fill_artist_id and gap > 0:
+        print(f"\nFilling {gap} gap(s) with latest tracks from fill artist...")
+        found_uris = set(found_tracks)
+        # Fetch extra in case some are already in the playlist
+        latest_tracks = spotify_api.get_artist_latest_tracks(fill_artist_id, gap * 2)
+        fill_tracks = [t for t in latest_tracks if t['uri'] not in found_uris][:gap]
+        if fill_tracks:
+            fill_uris = [t['uri'] for t in fill_tracks]
+            spotify_api.add_tracks_to_playlist(playlist_id, fill_uris)
+            for t in fill_tracks:
+                print(f"  ➕ {t['name']} by {t['artists']} ({t['release_date']})")
+        else:
+            print("⚠️ No new fill tracks available.")
+
+    year = datetime.now().year
+    base_description = f"🔥 Zimbabwe Top 100 Music Hits {year}!  {{artists}}. {{genres}}. #Hot100"
+    print(f"\nUpdating playlist description...")
+    spotify_api.update_playlist_description(playlist_id, "Zimbabwe Top 100", base_description)
 
 if __name__ == '__main__':
     main()

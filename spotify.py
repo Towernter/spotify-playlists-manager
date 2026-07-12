@@ -67,7 +67,6 @@ class SpotifyAPI:
         ]
      
     def search_song(self, query, limit=5):
-        # Debug: Print the search query
         endpoint = f'search?q={query}&type=track&limit={limit}'
         data = self.fetch_web_api(endpoint)
         tracks = data.get('tracks', {}).get('items', [])
@@ -75,16 +74,10 @@ class SpotifyAPI:
         if not tracks:
             return None
 
-        # Debug: Print all search results
-        for i, track in enumerate(tracks):
-            track_artists = ', '.join(artist['name'] for artist in track['artists'])
-
-        # Iterate through the tracks to find the best match
+        # First pass: full query is a substring of track name or artists
         for track in tracks:
             track_artists = ', '.join(artist['name'] for artist in track['artists'])
             track_name = track['name']
-
-            # Check if the query is a close match to the track name or artists
             if query.lower() in track_name.lower() or query.lower() in track_artists.lower():
                 return {
                     'id': track['id'],
@@ -96,16 +89,24 @@ class SpotifyAPI:
                     'popularity': track['popularity']
                 }
 
-        # If no matching track is found, return the first result
-        return {
-            'id': tracks[0]['id'],
-            'uri': tracks[0]['uri'],
-            'song_name': tracks[0]['name'],
-            'artists': ', '.join(artist['name'] for artist in tracks[0]['artists']),
-            'album': tracks[0]['album']['name'],
-            'release_date': tracks[0]['album']['release_date'],
-            'popularity': tracks[0]['popularity']
-        }
+        # Second pass: at least one significant query word must appear in the track name
+        stop_words = {'the', 'a', 'an', 'and', 'or', 'by', 'ft', 'feat', 'with', 'of', 'in', 'on'}
+        query_words = {w.lower() for w in query.split() if len(w) > 2 and w.lower() not in stop_words}
+        for track in tracks:
+            track_name = track['name']
+            track_artists = ', '.join(artist['name'] for artist in track['artists'])
+            if query_words & set(track_name.lower().split()):
+                return {
+                    'id': track['id'],
+                    'uri': track['uri'],
+                    'song_name': track_name,
+                    'artists': track_artists,
+                    'album': track['album']['name'],
+                    'release_date': track['album']['release_date'],
+                    'popularity': track['popularity']
+                }
+
+        return None
 
     def search_song_strict(self, query, limit=5):
         # Debug: Print the search query
@@ -306,6 +307,28 @@ class SpotifyAPI:
 
         print(f"✅ Updated playlist {playlist_name} Description: {new_description}")
         print("_____________________________________________________________________")
+
+    def get_artist_latest_tracks(self, artist_id, limit):
+        endpoint = f'artists/{artist_id}/albums?include_groups=single,album&limit=50'
+        data = self.fetch_web_api(endpoint)
+        albums = sorted(data.get('items', []), key=lambda x: x['release_date'], reverse=True)
+
+        seen_uris = set()
+        tracks = []
+        for album in albums:
+            album_tracks = self.fetch_web_api(f'albums/{album["id"]}/tracks')
+            for track in album_tracks.get('items', []):
+                if track['uri'] not in seen_uris:
+                    seen_uris.add(track['uri'])
+                    tracks.append({
+                        'uri': track['uri'],
+                        'name': track['name'],
+                        'artists': ', '.join(a['name'] for a in track['artists']),
+                        'release_date': album['release_date']
+                    })
+                if len(tracks) >= limit:
+                    return tracks
+        return tracks
 
     def reorder_playlist_by_track_popularity(self, playlist_id):
         tracks = self.get_playlist_tracks(playlist_id)
