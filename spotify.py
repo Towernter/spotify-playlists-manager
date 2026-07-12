@@ -66,96 +66,78 @@ class SpotifyAPI:
             for item in data.get('items', [])
         ]
      
-    def search_song(self, query, limit=5):
+    def _make_track_result(self, track):
+        return {
+            'id': track['id'],
+            'uri': track['uri'],
+            'song_name': track['name'],
+            'artists': ', '.join(a['name'] for a in track['artists']),
+            'album': track['album']['name'],
+            'release_date': track['album']['release_date'],
+            'popularity': track['popularity'],
+        }
+
+    def search_song(self, query, limit=10):
         endpoint = f'search?q={query}&type=track&limit={limit}'
         data = self.fetch_web_api(endpoint)
         tracks = data.get('tracks', {}).get('items', [])
-
         if not tracks:
             return None
 
-        # First pass: full query is a substring of track name or artists
+        # Pass 1: full query is a substring of track name or combined artists
         for track in tracks:
-            track_artists = ', '.join(artist['name'] for artist in track['artists'])
-            track_name = track['name']
-            if query.lower() in track_name.lower() or query.lower() in track_artists.lower():
-                return {
-                    'id': track['id'],
-                    'uri': track['uri'],
-                    'song_name': track_name,
-                    'artists': track_artists,
-                    'album': track['album']['name'],
-                    'release_date': track['album']['release_date'],
-                    'popularity': track['popularity']
-                }
+            track_artists = ', '.join(a['name'] for a in track['artists'])
+            if query.lower() in track['name'].lower() or query.lower() in track_artists.lower():
+                return self._make_track_result(track)
 
         stop_words = {'the', 'a', 'an', 'and', 'or', 'by', 'ft', 'feat', 'with', 'of', 'in', 'on'}
         query_words = {w.lower() for w in query.split() if len(w) > 2 and w.lower() not in stop_words}
 
-        # Pass 2: artist name overlaps AND at least one query word appears in the track title.
-        # Both conditions required — artist-only match grabs wrong songs from the right artist.
+        # Pass 2: artist-name matching.
+        # Accept when ≥2 distinct track artists are identified by query words — this is a
+        # high-confidence multi-artist match that doesn't need title confirmation
+        # (e.g. "Shinsoman Kae Chaps" → "Always On My Mind by Shinsoman, Kae Chaps").
+        # For a single matched artist, also require a title word to overlap (exact or substring)
+        # to rule out same-artist songs with unrelated titles
+        # (e.g. "Munhu Wangu Kae Chaps" must NOT match "Murder Mdhara by Kae Chaps").
         for track in tracks:
-            track_name = track['name']
-            track_artists_str = ', '.join(artist['name'] for artist in track['artists'])
-            artist_words = {w.lower() for a in track['artists'] for w in a['name'].split() if len(w) > 2}
-            title_words = set(track_name.lower().split())
-            if (query_words & artist_words) and (query_words & title_words):
-                return {
-                    'id': track['id'],
-                    'uri': track['uri'],
-                    'song_name': track_name,
-                    'artists': track_artists_str,
-                    'album': track['album']['name'],
-                    'release_date': track['album']['release_date'],
-                    'popularity': track['popularity']
-                }
+            title_words = set(track['name'].lower().split())
+            matched_artists = sum(
+                1 for artist in track['artists']
+                if query_words & {w.lower() for w in artist['name'].split() if len(w) > 2}
+            )
+            if matched_artists >= 2:
+                return self._make_track_result(track)
+            if matched_artists == 1:
+                # Exact title-word match
+                if query_words & title_words:
+                    return self._make_track_result(track)
+                # Substring overlap handles slight spelling differences
+                # (e.g. query "pagorogota" ↔ title word "gorogota", or "here" ↔ "here?")
+                if any(
+                    len(qw) >= 4 and len(tw) >= 4 and (qw in tw or tw in qw)
+                    for qw in query_words for tw in title_words
+                ):
+                    return self._make_track_result(track)
 
-        # Pass 3: at least 2 query words appear in the track title.
-        # Handles songs where the artist name isn't in the YouTube title.
-        # Requires 2 words to prevent single common-word matches (e.g. "wangu").
+        # Pass 3: ≥2 query words appear in the track title.
+        # Catches songs where no artist name is in the YouTube title.
         for track in tracks:
-            track_name = track['name']
-            track_artists_str = ', '.join(artist['name'] for artist in track['artists'])
-            if len(query_words & set(track_name.lower().split())) >= 2:
-                return {
-                    'id': track['id'],
-                    'uri': track['uri'],
-                    'song_name': track_name,
-                    'artists': track_artists_str,
-                    'album': track['album']['name'],
-                    'release_date': track['album']['release_date'],
-                    'popularity': track['popularity']
-                }
+            if len(query_words & set(track['name'].lower().split())) >= 2:
+                return self._make_track_result(track)
 
         return None
 
-    def search_song_strict(self, query, limit=5):
-        # Debug: Print the search query
+    def search_song_strict(self, query, limit=10):
         endpoint = f'search?q={query}&type=track&limit={limit}'
         data = self.fetch_web_api(endpoint)
         tracks = data.get('tracks', {}).get('items', [])
-
         if not tracks:
-            return None  # No tracks found at all
-
-        # Iterate through the search results and look for close matches
+            return None
         for track in tracks:
-            track_artists = ', '.join(artist['name'] for artist in track['artists'])
-            track_name = track['name']
-
-            # Match if the query closely matches the song name or artist names
-            if query.lower() in track_name.lower() or query.lower() in track_artists.lower():
-                return {
-                    'id': track['id'],
-                    'uri': track['uri'],
-                    'song_name': track_name,
-                    'artists': track_artists,
-                    'album': track['album']['name'],
-                    'release_date': track['album']['release_date'],
-                    'popularity': track['popularity']
-                }
-
-        # If no close match is found, return None
+            track_artists = ', '.join(a['name'] for a in track['artists'])
+            if query.lower() in track['name'].lower() or query.lower() in track_artists.lower():
+                return self._make_track_result(track)
         print(f"No strict match found for query: {query}")
         return None
 
