@@ -142,12 +142,12 @@ def update_playlist_from_youtube(playlist_id, youtube_playlist_id, spotify_api,
         print(f"Removed from playlist: {len(tracks_to_remove)}")
 
     gap = target_count - len(found_tracks)
-    if fill_artist_id and gap > 0:
-        print(f"\nFilling {gap} gap(s) with latest tracks from fill artist...")
+    fill_count = min(gap, 3)
+    if fill_artist_id and fill_count > 0:
+        print(f"\nFilling {fill_count} gap(s) with latest 9xne tracks (gap is {gap}, capped at 3)...")
         found_uris = set(found_tracks)
-        # Fetch extra in case some are already in the playlist
-        latest_tracks = spotify_api.get_artist_latest_tracks(fill_artist_id, gap * 2)
-        fill_tracks = [t for t in latest_tracks if t['uri'] not in found_uris][:gap]
+        latest_tracks = spotify_api.get_artist_latest_tracks(fill_artist_id, fill_count * 3)
+        fill_tracks = [t for t in latest_tracks if t['uri'] not in found_uris][:fill_count]
         if fill_tracks:
             fill_uris = [t['uri'] for t in fill_tracks]
             spotify_api.add_tracks_to_playlist(playlist_id, fill_uris)

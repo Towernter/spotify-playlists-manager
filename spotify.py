@@ -89,18 +89,34 @@ class SpotifyAPI:
                     'popularity': track['popularity']
                 }
 
-        # Second pass: at least one significant query word must appear in the track name
         stop_words = {'the', 'a', 'an', 'and', 'or', 'by', 'ft', 'feat', 'with', 'of', 'in', 'on'}
         query_words = {w.lower() for w in query.split() if len(w) > 2 and w.lower() not in stop_words}
+
         for track in tracks:
             track_name = track['name']
-            track_artists = ', '.join(artist['name'] for artist in track['artists'])
-            if query_words & set(track_name.lower().split()):
+            track_artists_str = ', '.join(artist['name'] for artist in track['artists'])
+            artist_words = {w.lower() for a in track['artists'] for w in a['name'].split() if len(w) > 2}
+
+            # Pass 2: at least one query word matches this track's artist names
+            if query_words & artist_words:
                 return {
                     'id': track['id'],
                     'uri': track['uri'],
                     'song_name': track_name,
-                    'artists': track_artists,
+                    'artists': track_artists_str,
+                    'album': track['album']['name'],
+                    'release_date': track['album']['release_date'],
+                    'popularity': track['popularity']
+                }
+
+            # Pass 3: at least 2 query words appear in the track title
+            # (single-word overlap is too weak — common Shona words like "wangu" cause false positives)
+            if len(query_words & set(track_name.lower().split())) >= 2:
+                return {
+                    'id': track['id'],
+                    'uri': track['uri'],
+                    'song_name': track_name,
+                    'artists': track_artists_str,
                     'album': track['album']['name'],
                     'release_date': track['album']['release_date'],
                     'popularity': track['popularity']
@@ -314,21 +330,35 @@ class SpotifyAPI:
         albums = sorted(data.get('items', []), key=lambda x: x['release_date'], reverse=True)
 
         seen_uris = set()
-        tracks = []
+        candidates = []
         for album in albums:
             album_tracks = self.fetch_web_api(f'albums/{album["id"]}/tracks')
             for track in album_tracks.get('items', []):
                 if track['uri'] not in seen_uris:
                     seen_uris.add(track['uri'])
-                    tracks.append({
+                    candidates.append({
+                        'id': track['id'],
                         'uri': track['uri'],
                         'name': track['name'],
                         'artists': ', '.join(a['name'] for a in track['artists']),
-                        'release_date': album['release_date']
+                        'release_date': album['release_date'],
+                        'popularity': 0
                     })
-                if len(tracks) >= limit:
-                    return tracks
-        return tracks
+            if len(candidates) >= limit * 5:
+                break
+
+        if not candidates:
+            return []
+
+        # Batch-fetch popularity so same-date tracks can be ranked by listens
+        ids = ','.join(t['id'] for t in candidates[:50])
+        tracks_data = self.fetch_web_api(f'tracks?ids={ids}')
+        pop_map = {t['id']: t['popularity'] for t in tracks_data.get('tracks', []) if t}
+        for t in candidates:
+            t['popularity'] = pop_map.get(t['id'], 0)
+
+        candidates.sort(key=lambda x: (x['release_date'], x['popularity']), reverse=True)
+        return candidates[:limit]
 
     def reorder_playlist_by_track_popularity(self, playlist_id):
         tracks = self.get_playlist_tracks(playlist_id)
