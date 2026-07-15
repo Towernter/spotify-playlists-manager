@@ -1,6 +1,7 @@
 import requests
 import base64
 import time
+import re
 
 class SpotifyAPI:
     def __init__(self, client_id, client_secret, refresh_token):
@@ -51,20 +52,28 @@ class SpotifyAPI:
 
     def get_playlist_tracks(self, playlist_id):
         fields = 'items(track(id,uri,name,artists(name),album(release_date),popularity),added_at)'
-        endpoint = f'playlists/{playlist_id}/tracks?fields={fields}'
-        data = self.fetch_web_api(endpoint)
-        return [
-            {
-                'id': item['track']['id'],
-                'uri': item['track']['uri'],
-                'song_name': item['track']['name'],
-                'artists': ', '.join(artist['name'] for artist in item['track']['artists']),
-                'date_added': item['added_at'],
-                'release_date': item['track']['album']['release_date'],
-                'popularity': item['track']['popularity']
-            }
-            for item in data.get('items', [])
-        ]
+        tracks = []
+        offset = 0
+        while True:
+            endpoint = f'playlists/{playlist_id}/tracks?fields={fields}&limit=100&offset={offset}'
+            data = self.fetch_web_api(endpoint)
+            items = data.get('items', [])
+            tracks += [
+                {
+                    'id': item['track']['id'],
+                    'uri': item['track']['uri'],
+                    'song_name': item['track']['name'],
+                    'artists': ', '.join(artist['name'] for artist in item['track']['artists']),
+                    'date_added': item['added_at'],
+                    'release_date': item['track']['album']['release_date'],
+                    'popularity': item['track']['popularity']
+                }
+                for item in items if item.get('track')
+            ]
+            if len(items) < 100:
+                break
+            offset += 100
+        return tracks
      
     def _make_track_result(self, track):
         return {
@@ -104,7 +113,7 @@ class SpotifyAPI:
             title_words = set(track['name'].lower().split())
             matched_artists = sum(
                 1 for artist in track['artists']
-                if query_words & {w.lower() for w in artist['name'].split() if len(w) > 2}
+                if query_words & {w.lower() for w in re.split(r'\W+', artist['name']) if len(w) > 2}
             )
             if matched_artists >= 2:
                 return self._make_track_result(track)
