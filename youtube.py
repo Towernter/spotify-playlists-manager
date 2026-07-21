@@ -44,13 +44,36 @@ class YouTubeAPI:
         # If no clear delimiter, return the title as the song name
         return (title, ""), (title, "")
 
+    # Patterns whose bracket content is purely noise (no alternative title inside)
+    _NOISE_BRACKET = re.compile(
+        r'^(?:official|music|video|lyrics?|lyric|visualizer|audio|hq|hd|4k|1080p|'
+        r'live|remix|version|edit|clip|cover|feat|ft|featuring|prod|by|mv|ep)\b',
+        re.IGNORECASE
+    )
+
+    def extract_bracket_alternatives(self, text):
+        """Return non-noise text found inside (), [], {} as potential alternative titles."""
+        matches = re.findall(r'[\(\[\{]([^\)\]\}]+)[\)\]\}]', text)
+        results = []
+        for m in matches:
+            m = m.strip()
+            if not m:
+                continue
+            if self._NOISE_BRACKET.match(m):
+                continue
+            # Require at least one substantive word (>3 chars, not a noise word)
+            substantive = [w for w in m.split() if len(w) > 3 and not self._NOISE_BRACKET.match(w)]
+            if substantive:
+                results.append(m)
+        return results
+
     def clean_title(self, title):
         # Remove anything in brackets (e.g., (Official Video), [Lyrics], etc.)
         title = re.sub(r'\(.*?\)|\[.*?\]|\{.*?\}|#\S+', '', title)
 
         # Remove common unwanted phrases (case-insensitive)
         unwanted_phrases = [
-            "official music video", "official video", "lyrics", "lyric video",
+            "official music video", "official video", "lyrics", "lyric video", "album",
             "visualizer", "live", "ft.", "ft", "feat.", "featuring", "prod.", "remix",
             "version", "starring", "by", "audio", "video", "hq", "hd", "4k", "1080p",
             "lyric", "clip", "performance", "cover", "original", "extended", "edit",

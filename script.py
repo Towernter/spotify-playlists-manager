@@ -90,6 +90,10 @@ def update_playlist_from_youtube(playlist_id, youtube_playlist_id, spotify_api,
         query1 = f"{cleaned_song_first} {cleaned_artist_first}" if cleaned_artist_first else cleaned_song_first
         query2 = f"{cleaned_song_second} {cleaned_artist_second}" if cleaned_artist_second else cleaned_song_second
 
+        # Alternative titles hidden in brackets (e.g. "(Always On My Mind)" inside "Munhu Wangu (Always On My Mind)")
+        alt_names = (youtube_api.extract_bracket_alternatives(song_first) +
+                     youtube_api.extract_bracket_alternatives(song_second))
+
         print("----------------------------------------------------------------------------")
         print(f"Search Query: {query1}")
 
@@ -98,6 +102,15 @@ def update_playlist_from_youtube(playlist_id, youtube_playlist_id, spotify_api,
         result = search_method(query1)
         if not result:
             result = search_method(query2)
+        if not result:
+            for alt in alt_names:
+                alt_cleaned = youtube_api.clean_title(alt)
+                if not alt_cleaned:
+                    continue
+                query_alt = f"{alt_cleaned} {cleaned_artist_first}" if cleaned_artist_first else alt_cleaned
+                result = search_method(query_alt)
+                if result:
+                    break
 
         if any(word in title.lower() for word in ["deleted", "private"]):
             print(f"{count}. ⏩ Skipped (Deleted/Private): {title}")
